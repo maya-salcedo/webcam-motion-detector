@@ -1,27 +1,78 @@
-import cv2
+import cv2, time, pandas
+from datetime import datetime
 
-face_cascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml") # will create a face cascadeclassifier
 
-img = cv2.imread("lecture/news.jpg") # to load image into python
+first_frame = None
+status_list = [None, None]
+times = []
+df = pandas.DataFrame(columns=["Start", "End"]) #will create dataframe structure
 
-gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) # to create a variable that make the img also in grayscale
-                                                # it converts the color img to gray
+video = cv2.VideoCapture(0)
+        #if you have a video file, put the file path as parameter
+        #if want to use the built in webcam, 0 may be used
+        #if you have 2nd camera, 1 may be used
+        #if there is 3rd camera, 2 may be used
 
-#get the pixels of the face; the location and height and width of the rectangle where face is located
-#scaleFactor=1.05 --> python will find the image by 5%; bigger value like 1.5 will be less accurate but faster than small valu
-# minNeighbors --> tell python how many neighbors to search around windows; experiment what number give better results
-faces = face_cascade.detectMultiScale(gray_img, scaleFactor=1.1, minNeighbors=5)
+while True:
+    check, frame = video.read() #check: boolean
+    status = 0 #to denote that there is no motion in the current frame
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) #to convert the colored frame to gray
+    gray = cv2.GaussianBlur(gray, (21,21), 0) # to make image blurry to remove noise and increase accuracy, 2nd param is width and height;
+                                                #3rd param is standard deviation, 0 is commonly used
+    if first_frame is None:
+        first_frame = gray
+        continue # so the python will go back to the beginning of loop and not process the code after this line
+                # in the following iteration of the loop, first_frame has not any None so it will skip this if loop
 
-for x, y, w, h in faces: #to get face in the rectangle area
-    img = cv2.rectangle(img, (x,y), (x+w,y+h),(0, 255, 0), 3) #(0:blue, 255:green, 0:red), 3:width of rectangle
-print(type(faces))
-print(faces)
+    delta_frame = cv2.absdiff(first_frame, gray)
 
-#.shape[1] is width of the image, .shape[0] is the height of the omage
-#convert to int because you might get a float
-resized = cv2.resize(img, (int(img.shape[1]/3), int(img.shape[0]/3,)))
+            # we want to assign those with threshhold of 30, a value of 255
+            # .threshold produces a tuple, [1] so access the second elementq
+    thresh_frame = cv2.threshold(delta_frame, 30, 255, cv2.THRESH_BINARY)[1]
 
-cv2.imshow("Gray", resized) # to show the image
-cv2.waitKey(0)
+    thresh_frame = cv2.dilate(thresh_frame, None, iterations=2) #iteration value: bigger value, smoother the image
+
+    (cnts,_) = cv2.findContours(thresh_frame.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            #find all the contours of the distinct object in this image
+            #all the contours will be saved in the cnts variable
+
+    for contour in cnts:
+        if cv2.contourArea(contour) < 10000:
+            continue #tells to go back to the 1st step of the loop
+        status = 1 #this code means that python find a motion in the video
+
+        (x, y, w, h) = cv2.boundingRect(contour)#to draw a rectangle if the countour area is > 1000
+        cv2.rectangle(frame, (x,y), (x+w, y+h), (0,255,0), 3)
+                #x,y is the coordinate of left upper corner of rectangle
+                # (x+w, y+h) is the coordinate of the right lower corner of the rectangle
+                #(0, 255, 0) color of rectangle
+                #3 is the width of the rectangle
+    status_list.append(status)
+
+    if status_list[-1] == 1 and status_list[-2] == 0:
+        times.append(datetime.now())
+    if status_list[-1] == 0 and status_list[-2] == 1:
+        times.append(datetime.now())
+
+
+
+    cv2.imshow("Gray Frame", gray) #1st param is name of window
+    cv2.imshow("Delta Frame", delta_frame)
+    cv2.imshow("Threshold Frame", thresh_frame)
+    cv2.imshow("Color Frame", frame)
+    key = cv2.waitKey(1)
+
+    if key == ord("q"): # to break the while loop, press q
+        if status==1:
+            times.append(datetime.now())
+        break
+print(status_list)
+print(times)
+
+for i in range(0,len(times), 2):
+    df = df.append({"Start":times[i], "End":times[i+1]}, ignore_index=True)
+
+df.to_csv("Times.csv")
+
+video.release() #to access the object in the video
 cv2.destroyAllWindows()
-
