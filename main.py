@@ -49,6 +49,8 @@ while True:
                 #3 is the width of the rectangle
     status_list.append(status)
 
+    status_list = status_list[-2:] #to save on memory
+
     if status_list[-1] == 1 and status_list[-2] == 0:
         times.append(datetime.now())
     if status_list[-1] == 0 and status_list[-2] == 1:
@@ -72,7 +74,7 @@ print(times)
 for i in range(0,len(times), 2):
     df = df.append({"Start":times[i], "End":times[i+1]}, ignore_index=True)
 
-df.to_csv("Times.csv")
+df.to_csv("Times.csv") #this is the data frame
 
 video.release() #to access the object in the video
 cv2.destroyAllWindows()
